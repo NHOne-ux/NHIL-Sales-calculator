@@ -1,0 +1,427 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NHIL Sales Spark Calculator</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {
+      background: linear-gradient(135deg, #6b48ff, #00ddeb, #ff2e63);
+      font-family: 'Arial', sans-serif;
+      color: #333;
+      margin: 0;
+      padding: 0;
+      overflow-x: hidden;
+    }
+    .card {
+      background: rgba(255, 255, 255, 0.95);
+      border-radius: 1.5rem;
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.2);
+      padding: 2rem;
+      max-width: 600px;
+      width: 100%;
+      margin: 2rem auto;
+      box-sizing: border-box;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+    .header img {
+      height: 60px;
+      max-width: 150px;
+      object-fit: contain;
+    }
+    .header h1 {
+      font-size: 2rem;
+      font-weight: bold;
+      background: linear-gradient(90deg, #ff6f61, #ffcc5c);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      text-align: center;
+      flex: 1;
+      margin: 0;
+    }
+    .section-title {
+      font-size: 1.25rem;
+      font-weight: bold;
+      background: linear-gradient(90deg, #00c4ff, #ff00ff);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .input-gradient {
+      border: 2px solid transparent;
+      border-image: linear-gradient(90deg, #ff6f61, #ffcc5c) 1;
+      border-radius: 0.75rem;
+      padding: 0.5rem;
+      background: #fefaf6;
+      transition: border-image 0.3s;
+      font-size: 1rem;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    .input-gradient:focus {
+      border-image: linear-gradient(90deg, #00c4ff, #ff00ff) 1;
+      outline: none;
+    }
+    .btn-gradient {
+      background: linear-gradient(90deg, #ff6f61, #ffcc5c);
+      color: white;
+      font-weight: bold;
+      border-radius: 0.75rem;
+      padding: 0.75rem;
+      transition: background 0.3s;
+      font-size: 1rem;
+      width: 100%;
+      box-sizing: border-box;
+      min-height: 44px;
+    }
+    .btn-gradient:hover {
+      background: linear-gradient(90deg, #ffcc5c, #ff6f61);
+    }
+    .table-header {
+      background: linear-gradient(90deg, #00c4ff, #ff00ff);
+      color: white;
+    }
+    .table-row:nth-child(odd) {
+      background: #f3e8ff;
+    }
+    .table-row:nth-child(even) {
+      background: #e0f7fa;
+    }
+    .result-highlight {
+      background: linear-gradient(90deg, #ff6f61, #ffcc5c);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .disclaimer {
+      margin-top: 1rem;
+      color: #666;
+    }
+    .parameter-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 0.5rem;
+      align-items: center;
+      margin-bottom: 0.5rem;
+    }
+    .results-table-container {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    table {
+      width: 100%;
+    }
+    .error-message {
+      color: #ff4444;
+      font-size: 0.875rem;
+      margin-top: 0.5rem;
+      display: none;
+    }
+    @media (max-width: 639px) {
+      .card {
+        max-width: 90%;
+        padding: 1.5rem;
+        margin: 1rem auto;
+      }
+      .header {
+        flex-direction: column;
+        justify-content: center;
+        gap: 0.5rem;
+      }
+      .header img {
+        height: 50px;
+        max-width: 120px;
+        margin: 0 auto;
+      }
+      .header h1 {
+        font-size: 1.5rem;
+        margin: 0.5rem 0;
+      }
+      .section-title {
+        font-size: 1rem;
+      }
+      .input-gradient {
+        font-size: 0.875rem;
+      }
+      .parameter-grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+      }
+      .parameter-grid div:nth-child(1) {
+        flex: 1 1 100%;
+      }
+      .parameter-grid div:nth-child(2),
+      .parameter-grid div:nth-child(3) {
+        flex: 1 1 calc(50% - 0.25rem);
+        min-width: 0;
+      }
+      table {
+        min-width: 500px;
+      }
+      label {
+        font-size: 0.875rem;
+      }
+      .results-table-container + p {
+        font-size: 0.875rem;
+      }
+      .error-message {
+        font-size: 0.75rem;
+      }
+    }
+  </style>
+</head>
+<body class="min-h-screen flex items-center justify-center">
+  <div class="card">
+    <!-- Header with Logos -->
+    <div class="header">
+      <img src="https://i.imgur.com/9vVHtYa.jpeg" alt="Narayana Health Logo - Red and blue cross with Narayana one Health text">
+      <h1>NHIL Sales Spark Calculator</h1>
+      <img src="https://www.narayanahealth.org/wp-content/uploads/2021/06/Narayana-Health-Insurance-Logo.png" alt="Narayana Health Insurance Logo">
+    </div>
+
+    <!-- Input Form -->
+    <div class="space-y-4">
+      <!-- Parameter Inputs -->
+      <div class="space-y-2">
+        <h2 class="section-title">Parameters</h2>
+        <div class="parameter-grid">
+          <div><label class="text-sm font-medium text-gray-600">Parameter</label></div>
+          <div><label class="text-sm font-medium text-gray-600">Target</label></div>
+          <div><label class="text-sm font-medium text-gray-600">Achievement</label></div>
+        </div>
+        <div class="parameter-grid">
+          <div><label class="text-sm text-gray-600">Aditi Insurance</label></div>
+          <div><input type="text" id="aditi-target" class="input-gradient" placeholder="e.g., 4,00,000" oninput="formatInput(this)"></div>
+          <div><input type="text" id="aditi-achievement" class="input-gradient" placeholder="e.g., 2,40,000" oninput="formatInput(this)"></div>
+        </div>
+      </div>
+
+      <!-- Error Message -->
+      <div id="error-message" class="error-message"></div>
+
+      <!-- Calculate Button -->
+      <button onclick="calculate()" class="btn-gradient">Calculate</button>
+    </div>
+
+    <!-- Results Section -->
+    <div id="results" class="mt-4 p-4 bg-gray-50 rounded-lg hidden">
+      <p id="final-result" class="font-semibold text-gray-800 mb-2"></p>
+      <p id="achievement-percent" class="font-semibold text-gray-800 mb-2"></p>
+      <h2 class="section-title">Incentive Breakdown</h2>
+      <div class="results-table-container">
+        <table class="text-sm mt-2 border-collapse">
+          <thead>
+            <tr class="table-header">
+              <th class="p-2">Incentive Component</th>
+              <th class="p-2">Incentive (Rs)</th>
+              <th class="p-2">Remarks</th>
+            </tr>
+          </thead>
+          <tbody id="results-table"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Disclaimers -->
+    <div class="disclaimer text-xs">
+      <p>*Note: Benefits shown are for representation purpose only and final benefit may defer as per the detailed T&C of the program.</p>
+      <p>*NHIL Confidential—Do not share externally.</p>
+    </div>
+  </div>
+
+  <script>
+    // Function to format numbers in Indian style (e.g., 1500000 → 15,00,000)
+    function formatIndianNumber(num) {
+      if (isNaN(num) || num === '') return '';
+      let [integerPart, decimalPart] = num.toString().split('.');
+      integerPart = integerPart.replace(/,/g, ''); // Remove existing commas
+      let lastThree = integerPart.slice(-3);
+      let otherNumbers = integerPart.slice(0, -3);
+      if (otherNumbers !== '') {
+        lastThree = ',' + lastThree;
+      }
+      let formatted = otherNumbers.replace(/\B(?=(\d{2})+(?!\d))/g, ',') + lastThree;
+      return decimalPart ? `${formatted}.${decimalPart}` : formatted;
+    }
+
+    // Function to parse formatted number back to raw value (e.g., 15,00,000 → 1500000)
+    function parseIndianNumber(str) {
+      if (!str) return 0;
+      return parseFloat(str.replace(/,/g, '')) || 0;
+    }
+
+    // Format input fields as user types
+    function formatInput(element, allowDecimals = false, integerOnly = false) {
+      let value = element.value.replace(/,/g, '');
+      if (integerOnly) {
+        // Remove any decimal part for integer-only fields
+        value = value.split('.')[0];
+        element.value = formatIndianNumber(value);
+      } else if (allowDecimals) {
+        let parts = value.split('.');
+        parts[0] = formatIndianNumber(parts[0]);
+        element.value = parts.length > 1 ? `${parts[0]}.${parts[1]}` : parts[0];
+      } else {
+        element.value = formatIndianNumber(value);
+      }
+    }
+
+    // Validate inputs
+    function validateInputs() {
+      const errorMessage = document.getElementById('error-message');
+      errorMessage.style.display = 'none';
+      errorMessage.innerText = '';
+
+      const inputs = [
+        { id: 'aditi-target', name: 'Aditi Insurance Target' },
+        { id: 'aditi-achievement', name: 'Aditi Insurance Achievement' }
+      ];
+
+      for (const input of inputs) {
+        const value = parseIndianNumber(document.getElementById(input.id).value);
+        if (value <= 0) {
+          errorMessage.innerText = `${input.name} must be a positive number.`;
+          errorMessage.style.display = 'block';
+          return false;
+        }
+      }
+      return true;
+    }
+
+    // Payout table (inclusive of lower bound, exclusive of upper bound)
+    const payoutTable = [
+      { min: 0, max: 60, payout: 0 },        // 0% to <60%
+      { min: 60, max: 70, payout: 0.03 },    // 60% to <70% → 3%
+      { min: 70, max: 80, payout: 0.04 },    // 70% to <80% → 4%
+      { min: 80, max: 90, payout: 0.05 },    // 80% to <90% → 5%
+      { min: 90, max: 100, payout: 0.06 },   // 90% to <100% → 6%
+      { min: 100, max: 110, payout: 0.12 },  // 100% to <110% → 12%
+      { min: 110, max: 120, payout: 0.15 },  // 110% to <120% → 15%
+      { min: 120, max: 130, payout: 0.20 },  // 120% to <130% → 20%
+      { min: 130, max: Infinity, payout: 0.25 } // >=130% → 25%
+    ];
+
+    // Calculate results
+    function calculate() {
+      // Validate inputs first
+      if (!validateInputs()) {
+        document.getElementById('results').classList.add('hidden');
+        return;
+      }
+
+      // Get input values and parse them
+      const aditiTarget = parseIndianNumber(document.getElementById('aditi-target').value);
+      const aditiAchievement = parseIndianNumber(document.getElementById('aditi-achievement').value);
+
+      // Calculate Achievement %
+      const achievementPercent = aditiTarget > 0 ? (aditiAchievement / aditiTarget * 100) : 0;
+
+      // Calculate Core Parameter Incentive (incremental slab-wise, starting at 60%)
+      let coreIncentive = 0;
+      let previousPercent = 60; // Start at 60% threshold
+      let previousAditi = aditiTarget * 0.6; // Aditi at 60%
+
+      if (achievementPercent > 60) { // Core Parameter incentive unlocks only if Achievement % > 60%
+        for (const slab of payoutTable) {
+          if (slab.min < 60) continue; // Skip slabs below 60%
+
+          // Determine the upper bound of the current slab
+          const upperPercent = slab.max === Infinity ? achievementPercent : Math.min(slab.max, achievementPercent);
+          if (upperPercent <= 60) continue; // Skip if we haven't exceeded 60%
+
+          // Calculate the Aditi at the upper bound of the slab
+          const upperAditi = (upperPercent / 100) * aditiTarget;
+
+          // Only include Aditi above the 60% threshold in the calculation
+          let slabAditi = 0;
+          if (upperAditi > previousAditi) {
+            slabAditi = upperAditi - previousAditi;
+            // Apply the payout rate to the Aditi in this slab
+            coreIncentive += slabAditi * slab.payout;
+          }
+
+          previousAditi = upperAditi;
+          previousPercent = upperPercent;
+          if (achievementPercent <= slab.max) break; // Stop if we've reached the achievement %
+        }
+      }
+
+      // Total Incentive (only Core Incentive for NHIL)
+      const totalIncentive = coreIncentive;
+
+      // Final Result Message
+      const finalResult = totalIncentive > 0
+        ? `Congratulations, you have qualified for the Spark Incentives. Your Incentive for this month is Rs ${formatIndianNumber(totalIncentive.toFixed(2))}.`
+        : `You missed the Spark incentive for the performance month.`;
+
+      // Display Achievement %
+      const achievementDisplay = `Achievement %: ${achievementPercent.toFixed(2)}%`;
+
+      // Display Results
+      const resultsTable = document.getElementById('results-table');
+      resultsTable.innerHTML = `
+        <tr class="table-row">
+          <td class="p-2">Core Parameter: Aditi Insurance</td>
+          <td class="p-2">${formatIndianNumber(coreIncentive.toFixed(2))}</td>
+          <td class="p-2">Incremental slab-wise payout on Aditi Insurance above 60% threshold (unlocks > 60%)</td>
+        </tr>
+        <tr class="table-row font-bold">
+          <td class="p-2">Total Incentive</td>
+          <td class="p-2 result-highlight">${formatIndianNumber(totalIncentive.toFixed(2))}</td>
+          <td class="p-2"></td>
+        </tr>
+      `;
+
+      document.getElementById('final-result').innerText = finalResult;
+      document.getElementById('achievement-percent').innerText = achievementDisplay;
+      document.getElementById('results').classList.remove('hidden');
+    }
+  </script>
+</body>
+</html>
