@@ -1,43 +1,4 @@
-<script type="text/javascript">
-        var gk_isXlsx = false;
-        var gk_xlsxFileLookup = {};
-        var gk_fileData = {};
-        function filledCell(cell) {
-          return cell !== '' && cell != null;
-        }
-        function loadFileData(filename) {
-        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
-            try {
-                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
-                var firstSheetName = workbook.SheetNames[0];
-                var worksheet = workbook.Sheets[firstSheetName];
-
-                // Convert sheet to JSON to filter blank rows
-                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
-                // Filter out blank rows (rows where all cells are empty, null, or undefined)
-                var filteredData = jsonData.filter(row => row.some(filledCell));
-
-                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
-                var headerRowIndex = filteredData.findIndex((row, index) =>
-                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
-                );
-                // Fallback
-                if (headerRowIndex === -1 || headerRowIndex > 25) {
-                  headerRowIndex = 0;
-                }
-
-                // Convert filtered JSON back to CSV
-                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
-                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
-                return csv;
-            } catch (e) {
-                console.error(e);
-                return "";
-            }
-        }
-        return gk_fileData[filename] || "";
-        }
-        </script><!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -45,6 +6,7 @@
   <title>NHIL Sales Spark Calculator</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
+    /* Fallback CSS in case Tailwind CDN fails */
     body {
       background: linear-gradient(135deg, #6b48ff, #00ddeb, #ff2e63);
       font-family: 'Arial', sans-serif;
@@ -52,6 +14,10 @@
       margin: 0;
       padding: 0;
       overflow-x: hidden;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
     }
     .card {
       background: rgba(255, 255, 255, 0.95);
@@ -65,7 +31,7 @@
     }
     .header {
       display: flex;
-      justify-content: space-between;
+      justify-content: center;
       align-items: center;
       flex-wrap: wrap;
       gap: 1rem;
@@ -217,12 +183,16 @@
   </style>
 </head>
 <body class="min-h-screen flex items-center justify-center">
+  <!-- 
+    This file must be named exactly "index.html" (lowercase) and placed in the root of your GitHub repository 
+    (or in the /docs folder if that's what you've configured for GitHub Pages).
+    After uploading, ensure GitHub Pages is enabled in your repository settings under Settings > Pages.
+  -->
   <div class="card">
-    <!-- Header with Logos -->
+    <!-- Header with Logo -->
     <div class="header">
-      <img src="https://i.imgur.com/9vVHtYa.jpeg" alt="Narayana Health Logo - Red and blue cross with Narayana one Health text">
+      <img src="https://i.imgur.com/9vVHtYa.jpeg" alt="Narayana Health Logo - Red and blue cross with Narayana one Health text" onerror="console.error('Failed to load Narayana Health Logo'); this.style.display='none';">
       <h1>NHIL Sales Spark Calculator</h1>
-      <img src="https://www.narayanahealth.org/wp-content/uploads/2021/06/Narayana-Health-Insurance-Logo.png" alt="Narayana Health Insurance Logo">
     </div>
 
     <!-- Input Form -->
@@ -278,60 +248,79 @@
   <script>
     // Function to format numbers in Indian style (e.g., 1500000 → 15,00,000)
     function formatIndianNumber(num) {
-      if (isNaN(num) || num === '') return '';
-      let [integerPart, decimalPart] = num.toString().split('.');
-      integerPart = integerPart.replace(/,/g, ''); // Remove existing commas
-      let lastThree = integerPart.slice(-3);
-      let otherNumbers = integerPart.slice(0, -3);
-      if (otherNumbers !== '') {
-        lastThree = ',' + lastThree;
+      try {
+        if (isNaN(num) || num === '') return '';
+        let [integerPart, decimalPart] = num.toString().split('.');
+        integerPart = integerPart.replace(/,/g, ''); // Remove existing commas
+        let lastThree = integerPart.slice(-3);
+        let otherNumbers = integerPart.slice(0, -3);
+        if (otherNumbers !== '') {
+          lastThree = ',' + lastThree;
+        }
+        let formatted = otherNumbers.replace(/\B(?=(\d{2})+(?!\d))/g, ',') + lastThree;
+        return decimalPart ? `${formatted}.${decimalPart}` : formatted;
+      } catch (error) {
+        console.error('Error in formatIndianNumber:', error);
+        return num.toString();
       }
-      let formatted = otherNumbers.replace(/\B(?=(\d{2})+(?!\d))/g, ',') + lastThree;
-      return decimalPart ? `${formatted}.${decimalPart}` : formatted;
     }
 
     // Function to parse formatted number back to raw value (e.g., 15,00,000 → 1500000)
     function parseIndianNumber(str) {
-      if (!str) return 0;
-      return parseFloat(str.replace(/,/g, '')) || 0;
+      try {
+        if (!str) return 0;
+        return parseFloat(str.replace(/,/g, '')) || 0;
+      } catch (error) {
+        console.error('Error in parseIndianNumber:', error);
+        return 0;
+      }
     }
 
     // Format input fields as user types
     function formatInput(element, allowDecimals = false, integerOnly = false) {
-      let value = element.value.replace(/,/g, '');
-      if (integerOnly) {
-        // Remove any decimal part for integer-only fields
-        value = value.split('.')[0];
-        element.value = formatIndianNumber(value);
-      } else if (allowDecimals) {
-        let parts = value.split('.');
-        parts[0] = formatIndianNumber(parts[0]);
-        element.value = parts.length > 1 ? `${parts[0]}.${parts[1]}` : parts[0];
-      } else {
-        element.value = formatIndianNumber(value);
+      try {
+        let value = element.value.replace(/,/g, '');
+        if (integerOnly) {
+          value = value.split('.')[0];
+          element.value = formatIndianNumber(value);
+        } else if (allowDecimals) {
+          let parts = value.split('.');
+          parts[0] = formatIndianNumber(parts[0]);
+          element.value = parts.length > 1 ? `${parts[0]}.${parts[1]}` : parts[0];
+        } else {
+          element.value = formatIndianNumber(value);
+        }
+      } catch (error) {
+        console.error('Error in formatInput:', error);
+        element.value = element.value; // Revert to original value on error
       }
     }
 
     // Validate inputs
     function validateInputs() {
-      const errorMessage = document.getElementById('error-message');
-      errorMessage.style.display = 'none';
-      errorMessage.innerText = '';
+      try {
+        const errorMessage = document.getElementById('error-message');
+        errorMessage.style.display = 'none';
+        errorMessage.innerText = '';
 
-      const inputs = [
-        { id: 'aditi-target', name: 'Aditi Insurance Target' },
-        { id: 'aditi-achievement', name: 'Aditi Insurance Achievement' }
-      ];
+        const inputs = [
+          { id: 'aditi-target', name: 'Aditi Insurance Target' },
+          { id: 'aditi-achievement', name: 'Aditi Insurance Achievement' }
+        ];
 
-      for (const input of inputs) {
-        const value = parseIndianNumber(document.getElementById(input.id).value);
-        if (value <= 0) {
-          errorMessage.innerText = `${input.name} must be a positive number.`;
-          errorMessage.style.display = 'block';
-          return false;
+        for (const input of inputs) {
+          const value = parseIndianNumber(document.getElementById(input.id).value);
+          if (value <= 0) {
+            errorMessage.innerText = `${input.name} must be a positive number.`;
+            errorMessage.style.display = 'block';
+            return false;
+          }
         }
+        return true;
+      } catch (error) {
+        console.error('Error in validateInputs:', error);
+        return false;
       }
-      return true;
     }
 
     // Payout table (inclusive of lower bound, exclusive of upper bound)
@@ -349,78 +338,85 @@
 
     // Calculate results
     function calculate() {
-      // Validate inputs first
-      if (!validateInputs()) {
-        document.getElementById('results').classList.add('hidden');
-        return;
-      }
-
-      // Get input values and parse them
-      const aditiTarget = parseIndianNumber(document.getElementById('aditi-target').value);
-      const aditiAchievement = parseIndianNumber(document.getElementById('aditi-achievement').value);
-
-      // Calculate Achievement %
-      const achievementPercent = aditiTarget > 0 ? (aditiAchievement / aditiTarget * 100) : 0;
-
-      // Calculate Core Parameter Incentive (incremental slab-wise, starting at 60%)
-      let coreIncentive = 0;
-      let previousPercent = 60; // Start at 60% threshold
-      let previousAditi = aditiTarget * 0.6; // Aditi at 60%
-
-      if (achievementPercent > 60) { // Core Parameter incentive unlocks only if Achievement % > 60%
-        for (const slab of payoutTable) {
-          if (slab.min < 60) continue; // Skip slabs below 60%
-
-          // Determine the upper bound of the current slab
-          const upperPercent = slab.max === Infinity ? achievementPercent : Math.min(slab.max, achievementPercent);
-          if (upperPercent <= 60) continue; // Skip if we haven't exceeded 60%
-
-          // Calculate the Aditi at the upper bound of the slab
-          const upperAditi = (upperPercent / 100) * aditiTarget;
-
-          // Only include Aditi above the 60% threshold in the calculation
-          let slabAditi = 0;
-          if (upperAditi > previousAditi) {
-            slabAditi = upperAditi - previousAditi;
-            // Apply the payout rate to the Aditi in this slab
-            coreIncentive += slabAditi * slab.payout;
-          }
-
-          previousAditi = upperAditi;
-          previousPercent = upperPercent;
-          if (achievementPercent <= slab.max) break; // Stop if we've reached the achievement %
+      try {
+        // Validate inputs first
+        if (!validateInputs()) {
+          document.getElementById('results').classList.add('hidden');
+          return;
         }
+
+        // Get input values and parse them
+        const aditiTarget = parseIndianNumber(document.getElementById('aditi-target').value);
+        const aditiAchievement = parseIndianNumber(document.getElementById('aditi-achievement').value);
+
+        // Calculate Achievement %
+        const achievementPercent = aditiTarget > 0 ? (aditiAchievement / aditiTarget * 100) : 0;
+
+        // Calculate Core Parameter Incentive (incremental slab-wise, starting at 60%)
+        let coreIncentive = 0;
+        let previousPercent = 60; // Start at 60% threshold
+        let previousAditi = aditiTarget * 0.6; // Aditi at 60%
+
+        if (achievementPercent > 60) { // Core Parameter incentive unlocks only if Achievement % > 60%
+          for (const slab of payoutTable) {
+            if (slab.min < 60) continue; // Skip slabs below 60%
+
+            // Determine the upper bound of the current slab
+            const upperPercent = slab.max === Infinity ? achievementPercent : Math.min(slab.max, achievementPercent);
+            if (upperPercent <= 60) continue; // Skip if we haven't exceeded 60%
+
+            // Calculate the Aditi at the upper bound of the slab
+            const upperAditi = (upperPercent / 100) * aditiTarget;
+
+            // Only include Aditi above the 60% threshold in the calculation
+            let slabAditi = 0;
+            if (upperAditi > previousAditi) {
+              slabAditi = upperAditi - previousAditi;
+              // Apply the payout rate to the Aditi in this slab
+              coreIncentive += slabAditi * slab.payout;
+            }
+
+            previousAditi = upperAditi;
+            previousPercent = upperPercent;
+            if (achievementPercent <= slab.max) break; // Stop if we've reached the achievement %
+          }
+        }
+
+        // Total Incentive (only Core Incentive for NHIL)
+        const totalIncentive = coreIncentive;
+
+        // Final Result Message
+        const finalResult = totalIncentive > 0
+          ? `Congratulations, you have qualified for the Spark Incentives. Your Incentive for this month is Rs ${formatIndianNumber(totalIncentive.toFixed(2))}.`
+          : `You missed the Spark incentive for the performance month.`;
+
+        // Display Achievement %
+        const achievementDisplay = `Achievement %: ${achievementPercent.toFixed(2)}%`;
+
+        // Display Results
+        const resultsTable = document.getElementById('results-table');
+        resultsTable.innerHTML = `
+          <tr class="table-row">
+            <td class="p-2">Core Parameter: Aditi Insurance</td>
+            <td class="p-2">${formatIndianNumber(coreIncentive.toFixed(2))}</td>
+            <td class="p-2">Incremental slab-wise payout on Aditi Insurance above 60% threshold (unlocks > 60%)</td>
+          </tr>
+          <tr class="table-row font-bold">
+            <td class="p-2">Total Incentive</td>
+            <td class="p-2 result-highlight">${formatIndianNumber(totalIncentive.toFixed(2))}</td>
+            <td class="p-2"></td>
+          </tr>
+        `;
+
+        document.getElementById('final-result').innerText = finalResult;
+        document.getElementById('achievement-percent').innerText = achievementDisplay;
+        document.getElementById('results').classList.remove('hidden');
+      } catch (error) {
+        console.error('Error in calculate:', error);
+        const errorMessage = document.getElementById('error-message');
+        errorMessage.innerText = 'An unexpected error occurred. Please check the console for details.';
+        errorMessage.style.display = 'block';
       }
-
-      // Total Incentive (only Core Incentive for NHIL)
-      const totalIncentive = coreIncentive;
-
-      // Final Result Message
-      const finalResult = totalIncentive > 0
-        ? `Congratulations, you have qualified for the Spark Incentives. Your Incentive for this month is Rs ${formatIndianNumber(totalIncentive.toFixed(2))}.`
-        : `You missed the Spark incentive for the performance month.`;
-
-      // Display Achievement %
-      const achievementDisplay = `Achievement %: ${achievementPercent.toFixed(2)}%`;
-
-      // Display Results
-      const resultsTable = document.getElementById('results-table');
-      resultsTable.innerHTML = `
-        <tr class="table-row">
-          <td class="p-2">Core Parameter: Aditi Insurance</td>
-          <td class="p-2">${formatIndianNumber(coreIncentive.toFixed(2))}</td>
-          <td class="p-2">Incremental slab-wise payout on Aditi Insurance above 60% threshold (unlocks > 60%)</td>
-        </tr>
-        <tr class="table-row font-bold">
-          <td class="p-2">Total Incentive</td>
-          <td class="p-2 result-highlight">${formatIndianNumber(totalIncentive.toFixed(2))}</td>
-          <td class="p-2"></td>
-        </tr>
-      `;
-
-      document.getElementById('final-result').innerText = finalResult;
-      document.getElementById('achievement-percent').innerText = achievementDisplay;
-      document.getElementById('results').classList.remove('hidden');
     }
   </script>
 </body>
